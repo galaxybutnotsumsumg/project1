@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      # Get Date for caching
+      # Get Date for cachindg
       - name: Get Date
         id: get-date
         run: |
