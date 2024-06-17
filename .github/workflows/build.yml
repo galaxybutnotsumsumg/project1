@@ -1,4 +1,4 @@
-name: CI with Accessibility Testing
+name: Object Detection App Build
 
 on:
   push:
@@ -11,68 +11,39 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      # Get Date for cachindg
-      - name: Get Date
-        id: get-date
+      - name: Set up Python environment
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.8  # Adjust as needed for your Kivy and YOLO requirements
+          cache: 'pip'
+
+      - name: Install dependencies
         run: |
-          echo "::set-output name=date::$(/bin/date -u "+%Y%m%d")"
-        shell: bash
+          pip install -r requirements.txt  # Assuming you have a requirements.txt file
+          pip install opencv-python pyttsx3 ultralytics  # Explicitly include dependencies
 
-      # Cache Buildozer Global Directory
-      - name: Cache Buildozer global directory
-        uses: actions/cache@v2
-        with:
-          path: .buildozer_global
-          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
-
-      # Cache Buildozer project directory
-      - name: Cache Buildozer
-        uses: actions/cache@v2
-        with:
-          path: .buildozer
-          key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('buildozer.spec') }}
-
-      # Install dependencies
-      - name: Install Python dependencies (Kivy, pyttsx3, ultralytics)
+      - name: Run Kivy app (if applicable)
+        if: ${{ runner.os == 'Linux' }}  # Only run Kivy build on Linux
         run: |
-          python -m pip install --upgrade pip
-          pip install kivy pyttsx3 ultralytics
+          python main.py  # Or your main Kivy app file
 
-      # Build with Buildozer
-      - name: Build Android app with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
-        with:
-          command: buildozer android debug
-
-      # Accessibility Tests (Replace with your chosen tool)
-      - name: Run Accessibility Tests with MonkeyTalk
-        uses: google/android-emulator@v1
-        with:
-          # Configure emulator (API level, etc.)
-          api-level: 28  # Adjust to your target API level
-          name: accessibility-test
-        env:
-          MONKEYTALK_HOST: localhost  # Assuming MonkeyTalk server runs locally
+      - name: Test the app (optional)
         run: |
-          # Grant permissions (adjust paths)
-          adb -s $ANDROID_EMULATOR_HOST shell pm grant com.yourapp.objectdetection android.permission.WRITE_EXTERNAL_STORAGE
-          adb -s $ANDROID_EMULATOR_HOST shell pm grant com.yourapp.objectdetection android.permission.READ_EXTERNAL_STORAGE
-          adb -s $ANDROID_EMULATOR_HOST shell pm grant com.yourapp.objectdetection android.permission.RECORD_AUDIO
+          # Add your testing commands here (e.g., unit tests, integration tests)
+          python test.py  # Or your test script
 
-          # Run MonkeyTalk tests (adjust paths)
-          monkeytalk run /path/to/your/monkeytalk/accessibility_tests.mt
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
+      - name: Build for Android (optional)
+        if: ${{ runner.os == 'Linux' }}  # Only run Android build on Linux
+        uses: google-research/android-wheels@v0.3.1
         with:
-          name: package
-          path: ${{ steps.buildozer.outputs.filename }}
+          architectures: arm64-v8a  # Adjust architectures as needed
+          platform: armeabi-v7a  # Adjust platform as needed
+          requirements: requirements-android.txt  # Optional file for Android dependencies
 
-      # Upload accessibility testing report (if applicable)
-      - name: Upload Accessibility Test Report
-        uses: actions/upload-artifact@v2
-        if: success() && steps.run-accessibility-tests.outputs.report  # Upload only if report exists
+      - name: Upload artifacts (optional)
+        uses: actions/upload-artifact@v3
         with:
-          name: accessibility-report
-          path: /path/to/accessibility_test_report.xml  # Adjust the path
+          name: built-app  # Adjust the name as needed
+          path: |
+            # Specify the path to your built Kivy app or Android APK (if applicable)
+            build/  # Or wherever your build output is located
