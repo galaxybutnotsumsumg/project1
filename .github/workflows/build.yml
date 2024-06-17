@@ -1,38 +1,78 @@
-name: YOLOv4 Training Workflow
+name: CI with Accessibility Testing
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
+      # Get Date for caching
+      - name: Get Date
+        id: get-date
+        run: |
+          echo "::set-output name=date::$(/bin/date -u "+%Y%m%d")"
+        shell: bash
+
+      # Cache Buildozer Global Directory
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v2
         with:
-          python-version: '3.x'  # Replace with your Python version
+          path: .buildozer_global
+          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
 
-      - name: Install dependencies
+      # Cache Buildozer project directory
+      - name: Cache Buildozer
+        uses: actions/cache@v2
+        with:
+          path: .buildozer
+          key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('buildozer.spec') }}
+
+      # Install dependencies
+      - name: Install Python dependencies (Kivy, pyttsx3, ultralytics)
         run: |
           python -m pip install --upgrade pip
-          pip install numpy opencv-python torch torchvision
+          pip install kivy pyttsx3 ultralytics
 
-      - name: Download YOLOv4 weights
-        run: |
-          wget -O weights/yolov4.weights https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v3_optimal/yolov4.weights
+      # Build with Buildozer
+      - name: Build Android app with Buildozer
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          command: buildozer android debug
 
-      - name: Run YOLOv4 training script
+      # Accessibility Tests (Replace with your chosen tool)
+      - name: Run Accessibility Tests with MonkeyTalk
+        uses: google/android-emulator@v1
+        with:
+          # Configure emulator (API level, etc.)
+          api-level: 28  # Adjust to your target API level
+          name: accessibility-test
+        env:
+          MONKEYTALK_HOST: localhost  # Assuming MonkeyTalk server runs locally
         run: |
-          python train.py --data path/to/your/data.yaml --cfg path/to/your/yolov4.cfg --weights weights/yolov4.weights --batch-size 64
+          # Grant permissions (adjust paths)
+          adb -s $ANDROID_EMULATOR_HOST shell pm grant com.yourapp.objectdetection android.permission.WRITE_EXTERNAL_STORAGE
+          adb -s $ANDROID_EMULATOR_HOST shell pm grant com.yourapp.objectdetection android.permission.READ_EXTERNAL_STORAGE
+          adb -s $ANDROID_EMULATOR_HOST shell pm grant com.yourapp.objectdetection android.permission.RECORD_AUDIO
+
+          # Run MonkeyTalk tests (adjust paths)
+          monkeytalk run /path/to/your/monkeytalk/accessibility_tests.mt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: trained-model
-          path: path/to/your/output/model/  # Replace with your model output directory
+          name: package
+          path: ${{ steps.buildozer.outputs.filename }}
+
+      # Upload accessibility testing report (if applicable)
+      - name: Upload Accessibility Test Report
+        uses: actions/upload-artifact@v2
+        if: success() && steps.run-accessibility-tests.outputs.report  # Upload only if report exists
+        with:
+          name: accessibility-report
+          path: /path/to/accessibility_test_report.xml  # Adjust the path
